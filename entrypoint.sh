@@ -3,6 +3,39 @@
 set -e
 set -o pipefail
 
+#####################################
+# establish a few helper functions
+reset_color="\\e[0m"
+color_red="\\e[31m"
+color_green="\\e[32m"
+color_yellow="\\e[33m"
+color_blue="\\e[36m"
+color_gray="\\e[37m"
+function echo_blue { echo -e "${color_blue}$*${reset_color}"; }
+function echo_green { echo -e "${color_green}$*${reset_color}"; }
+function echo_red { echo -e "${color_red}$*${reset_color}"; }
+function echo_yellow { echo -e "${color_yellow}$*${reset_color}"; }
+function echo_gray { echo -e "${color_gray}$*${reset_color}"; }
+function echo_grey { echo -e "${color_gray}$*${reset_color}"; }
+function echo_info { echo -e "${color_blue}info: $*${reset_color}"; }
+function echo_error { echo -e "${color_red}error: $*${reset_color}"; }
+function echo_warning { echo -e "${color_yellow}✔ $*${reset_color}"; }
+function echo_success { echo -e "${color_green}✔ $*${reset_color}"; }
+function echo_fail { echo -e "${color_red}✖ $*${reset_color}"; }
+function enable_debug {
+  if [[ "${INPUT_DEBUG}" == "true" ]]; then
+    echo_info "Enabling debug mode."
+    set -x
+  fi
+}
+function disable_debug {
+  if [[ "${INPUT_DEBUG}" == "true" ]]; then
+    set +x
+  fi
+}
+# no more helper functions.
+###################################
+
 if [[ -z "$GITHUB_TOKEN" ]]; then
   if [[ ! -z "$INPUT_GITHUB_TOKEN" ]]; then
     GITHUB_TOKEN="$INPUT_GITHUB_TOKEN"
@@ -51,53 +84,103 @@ fi
 # Workaround for `hub` auth error https://github.com/github/hub/issues/2149#issuecomment-513214342
 export GITHUB_USER="$GITHUB_ACTOR"
 
-PR_ARG="$INPUT_PR_TITLE"
-if [[ ! -z "$PR_ARG" ]]; then
-  PR_ARG="-m \"$PR_ARG\""
+# set GITHUB_TOKEN envar so hub cli commands can authenticate.
+export GITHUB_TOKEN="$INPUT_TOKEN"
 
+FLAGS+=(--no-edit)
+
+if [[ ! -z "$INPUT_PR_TITLE" ]]; then
+  FLAGS+=(-m "$INPUT_PR_TITLE")
   if [[ ! -z "$INPUT_PR_TEMPLATE" ]]; then
     sed -i 's/`/\\`/g; s/\$/\\\$/g' "$INPUT_PR_TEMPLATE"
-    PR_ARG="$PR_ARG -m \"$(echo -e "$(cat "$INPUT_PR_TEMPLATE")")\""
+    FLAGS+=(-m "$(echo -e "$(cat "$INPUT_PR_TEMPLATE")")")
   elif [[ ! -z "$INPUT_PR_BODY" ]]; then
-    PR_ARG="$PR_ARG -m \"$INPUT_PR_BODY\""
+    FLAGS+=(-m "$INPUT_PR_BODY")
   fi
 fi
 
 if [[ ! -z "$INPUT_PR_REVIEWER" ]]; then
-  PR_ARG="$PR_ARG -r \"$INPUT_PR_REVIEWER\""
+  FLAGS+=(-r "$INPUT_PR_REVIEWER")
 fi
 
 if [[ ! -z "$INPUT_PR_ASSIGNEE" ]]; then
-  PR_ARG="$PR_ARG -a \"$INPUT_PR_ASSIGNEE\""
+  FLAGS+=(-a "$INPUT_PR_ASSIGNEE")
 fi
 
 if [[ ! -z "$INPUT_PR_LABEL" ]]; then
-  PR_ARG="$PR_ARG -l \"$INPUT_PR_LABEL\""
+  FLAGS+=(-l "$INPUT_PR_LABEL")
 fi
 
 if [[ ! -z "$INPUT_PR_MILESTONE" ]]; then
-  PR_ARG="$PR_ARG -M \"$INPUT_PR_MILESTONE\""
+  FLAGS+=(-M "$INPUT_PR_MILESTONE")
 fi
 
 if [[ "$INPUT_PR_DRAFT" ==  "true" ]]; then
-  PR_ARG="$PR_ARG -d"
+  FLAGS+=(-d)
 fi
 
-COMMAND="GITHUB_TOKEN=\"$GITHUB_TOKEN\" hub pull-request \
-  -b $DESTINATION_BRANCH \
-  -h $SOURCE_BRANCH \
-  --no-edit \
-  $PR_ARG \
-  || true"
+echo "${FLAGS[@]}"
+echo "::endgroup::"
+
+echo "::group::Create Pull-Request $SOURCE_BRANCH -> $DESTINATION_BRANCH"
+RAND_UUID=$(cat /proc/sys/kernel/random/uuid)
+COMMAND="hub pull-request "${FLAGS[@]}" 2>\"./create-pull-request.$RAND_UUID.stderr\" || true"
 
 echo "$COMMAND"
 
-PR_URL=$(sh -c "$COMMAND")
-if [[ "$?" != "0" ]]; then
-  exit 1
+PR_URL=$( \
+  hub pull-request "${FLAGS[@]}" \
+  2>"./create-pull-request.$RAND_UUID.stderr" || true \
+)
+STD_ERROR="$( cat "./create-pull-request.$RAND_UUID.stderr" || true )"
+rm -rf "./create-pull-request.$RAND_UUID.stderr"
+echo "::endgroup::"
+
+echo "::group::Revert Git Config Changes"
+# set origin back as was previously configured.
+git remote set-url origin "$GIT_ORIGIN_URL"
+git fetch origin '+refs/heads/*:refs/heads/*' --update-head-ok
+git fetch --prune
+echo "::endgroup::"
+
+# determine success / failure
+# since various things can go wrong such as bad user input or non-existant branches, there is a need to handle outputs to determine if the pr was successfully created or not.
+if [[ -z "$PR_URL" ]]; then
+  if [[ ! -z "$(echo "$STD_ERROR" | grep -oie "A pull request already exists for")" ]]; then 
+    echo_yellow "Pull-Request Already Exists. This is the stderr output:"
+    echo_yellow "$STD_ERROR"
+  else
+    echo_fail "Pull-Request Command Failed. This is the stderr output:"
+    echo_red "$STD_ERROR"
+    exit 1
+  fi
+else
+  echo_success "Pull-Request was successfully created."
+  echo_success "pr_url: ${PR_URL}"
 fi
 
-echo ${PR_URL}
+# attempt to obtain the pull-request details - pr already exists.
+if [[ -z "$PR_URL" ]]; then
+  echo "::group::Retrieving Pull-Request Details"
+  RAND_UUID=$(cat /proc/sys/kernel/random/uuid)
+  PR_URL=$( \
+    hub pr list -h $SOURCE_BRANCH -b $DESTINATION_BRANCH -f %U \
+    2>"./get-pull-request.$RAND_UUID.stderr" || true \
+  )
+  STD_ERROR="$( cat "./get-pull-request.$RAND_UUID.stderr" || true )"
+  rm -rf "./get-pull-request.$RAND_UUID.stderr"
+
+  if [[ -z "$PR_URL" ]]; then
+      echo_fail "Pull-Request Already Exists, but was unable to retrieve url. This is the stderr output:"
+      echo_red "$STD_ERROR"
+  else
+    echo_success "Pull-Request details successfully obtained."
+    echo_success "pr_url: ${PR_URL}"
+  fi
+  echo "::endgroup::"
+fi
+
+echo "::group::Set Outputs"
 echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
 echo "pr_number=${PR_URL##*/}" >> $GITHUB_OUTPUT
 if [[ "$LINES_CHANGED" = "0" ]]; then
@@ -105,3 +188,5 @@ if [[ "$LINES_CHANGED" = "0" ]]; then
 else
   echo "has_changed_files=true" >> $GITHUB_OUTPUT
 fi
+echo_yellow "Outputs Set."
+echo "::endgroup::"
