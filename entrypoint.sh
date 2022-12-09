@@ -137,12 +137,11 @@ if [[ -z "$PR_URL" ]]; then
       echo "Pull-Request Already Exists, but was unable to retrieve url. This is the stderr output:"
       echo "$STD_ERROR"
   else
-    echo_success "Pull-Request details successfully obtained."
-    echo_success "pr_url: ${PR_URL}"
+    echo "Pull-Request details successfully obtained."
+    echo "pr_url: ${PR_URL}"
   fi
   echo "::endgroup::"
 fi
-
 echo "::endgroup::"
 
 
