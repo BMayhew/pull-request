@@ -83,6 +83,7 @@ if [[ "$INPUT_PR_DRAFT" ==  "true" ]]; then
   PR_ARG="$PR_ARG -d"
 fi
 
+RAND_UUID=$(cat /proc/sys/kernel/random/uuid)
 COMMAND="GITHUB_TOKEN=\"$GITHUB_TOKEN\" hub pull-request \
   -b $DESTINATION_BRANCH \
   -h $SOURCE_BRANCH \
@@ -92,13 +93,18 @@ COMMAND="GITHUB_TOKEN=\"$GITHUB_TOKEN\" hub pull-request \
 
 echo "$COMMAND"
 
-PR_URL=$(sh -c "$COMMAND")
+PR_URL=$( \
+  sh -c "$COMMAND" \
+  2>"./create-pull-request.$RAND_UUID.stderr" || true \
+  )
 if [[ "$?" != "0" ]]; then
   exit 1
 fi
 
+STD_ERROR="$( cat "./create-pull-request.$RAND_UUID.stderr" || true )"
+rm -rf "./create-pull-request.$RAND_UUID.stderr"
 
-echo "::group::Determin if PR was successful or not?"
+echo "::group::Determine if PR was successful or not?"
 
 # determine success / failure
 # since various things can go wrong such as bad user input or non-existant branches, there is a need to handle outputs to determine if the pr was successfully created or not.
