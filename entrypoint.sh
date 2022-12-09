@@ -60,6 +60,7 @@ DESTINATION_BRANCH="${INPUT_DESTINATION_BRANCH:-"master"}"
 git config --global --add safe.directory /github/workspace
 
 # Github actions no longer auto set the username and GITHUB_TOKEN
+GIT_ORIGIN_URL="$(git remote get-url origin)"
 git remote set-url origin "https://x-access-token:$GITHUB_TOKEN@${GITHUB_SERVER_URL#https://}/$GITHUB_REPOSITORY"
 
 # Pull all branches references down locally so subsequent commands can see them
