@@ -1,11 +1,12 @@
 # GitHub Pull Request
 
+This is a forked and modified version of <https://github.com/repo-sync/pull-request>. Functionality has been added to provide the pull request id/number for when there is a pull request that already exists.
+
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 [![All Contributors](https://img.shields.io/badge/all_contributors-17-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 A GitHub Action for creating pull requests.
-
 
 ## Features
  * Create pull requests

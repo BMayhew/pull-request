@@ -144,8 +144,6 @@ if [[ -z "$PR_URL" ]]; then
 fi
 echo "::endgroup::"
 
-
-
 echo ${PR_URL}
 echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
 echo "pr_number=${PR_URL##*/}" >> $GITHUB_OUTPUT
