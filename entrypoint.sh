@@ -137,12 +137,14 @@ STD_ERROR="$( cat "./create-pull-request.$RAND_UUID.stderr" || true )"
 rm -rf "./create-pull-request.$RAND_UUID.stderr"
 echo "::endgroup::"
 
-echo "::group::Revert Git Config Changes"
-# set origin back as was previously configured.
-git remote set-url origin "$GIT_ORIGIN_URL"
-git fetch origin '+refs/heads/*:refs/heads/*' --update-head-ok
-git fetch --prune
-echo "::endgroup::"
+# echo "::group::Revert Git Config Changes"
+# # set origin back as was previously configured.
+# git remote set-url origin "$GIT_ORIGIN_URL"
+# git fetch origin '+refs/heads/*:refs/heads/*' --update-head-ok
+# git fetch --prune
+# echo "::endgroup::"
+
+echo "::group::Determin if PR was successful or not?"
 
 # determine success / failure
 # since various things can go wrong such as bad user input or non-existant branches, there is a need to handle outputs to determine if the pr was successfully created or not.
@@ -181,7 +183,12 @@ if [[ -z "$PR_URL" ]]; then
   echo "::endgroup::"
 fi
 
+echo "::endgroup::"
+
+
 echo "::group::Set Outputs"
+echo "This is PR_URL=${PR_URL}"
+
 echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
 echo "pr_number=${PR_URL##*/}" >> $GITHUB_OUTPUT
 if [[ "$LINES_CHANGED" = "0" ]]; then
