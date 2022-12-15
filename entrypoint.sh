@@ -140,7 +140,7 @@ if [[ -z "$PR_URL" ]]; then
     echo "Pull-Request details successfully obtained."
     echo "pr_url: ${PR_URL}"
     echo "gh pr edit ${PR_URL##*/} --add-reviewer $INPUT_PR_REVIEWER"
-    sh -c gh pr edit ${PR_URL##*/} --add-reviewer $INPUT_PR_REVIEWER
+    gh pr edit ${PR_URL##*/} --add-reviewer $INPUT_PR_REVIEWER
   fi
   echo "::endgroup::"
 fi
